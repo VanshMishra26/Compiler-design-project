@@ -20,7 +20,7 @@ export function PhaseTabs({
   onChange: (phase: PhaseName) => void;
 }) {
   return (
-    <div className="flex border-b border-ink/10 bg-white">
+    <div className="flex bg-background">
       {phases.map((phase) => {
         const disabled = Boolean(result && !result[phase.key].data);
         const active = currentPhase === phase.key;
@@ -29,8 +29,10 @@ export function PhaseTabs({
             key={phase.key}
             disabled={disabled}
             onClick={() => onChange(phase.key)}
-            className={`h-11 border-r border-ink/10 px-4 text-sm font-medium transition ${
-              active ? "bg-ink text-white" : "text-ink/70 hover:bg-paper disabled:text-ink/25"
+            className={`h-12 border-r-2 border-primary px-5 text-overline uppercase transition ${
+              active
+                ? "border-b-[3px] border-b-secondary bg-primary text-tertiary"
+                : "bg-background text-muted hover:bg-primary hover:text-tertiary disabled:text-faint disabled:hover:bg-background disabled:hover:text-faint"
             }`}
           >
             {phase.label}

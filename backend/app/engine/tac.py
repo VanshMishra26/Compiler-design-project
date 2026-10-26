@@ -53,6 +53,12 @@ class TACGenerator:
             self.emit("=", value, None, node.attrs["name"], node)
         return node.attrs["name"]
 
+    def visit_VarDeclList(self, node: ASTNode) -> str | None:
+        value = None
+        for child in node.children:
+            value = self.visit(child)
+        return value
+
     def visit_Literal(self, node: ASTNode) -> str:
         return str(node.attrs["value"])
 
@@ -60,9 +66,20 @@ class TACGenerator:
         return node.attrs["name"]
 
     def visit_AssignExpr(self, node: ASTNode) -> str:
-        value = self.visit(node.children[0])
-        self.emit("=", value, None, node.attrs["name"], node)
-        return node.attrs["name"]
+        if node.attrs.get("targetKind"):
+            target = self.visit(node.children[0])
+            value = self.visit(node.children[1])
+        else:
+            target = node.attrs["name"]
+            value = self.visit(node.children[0])
+        op = node.attrs.get("op", "=")
+        if op == "=":
+            self.emit("=", value, None, target, node)
+        else:
+            temp = self.new_temp()
+            self.emit(op[:-1], target, value, temp, node)
+            self.emit("=", temp, None, target, node)
+        return target
 
     def visit_BinaryExpr(self, node: ASTNode) -> str:
         left = self.visit(node.children[0])
@@ -83,6 +100,20 @@ class TACGenerator:
         temp = self.new_temp()
         self.emit("call", node.attrs["callee"], str(len(node.children)), temp, node)
         return temp
+
+    def visit_IndexExpr(self, node: ASTNode) -> str:
+        base = self.visit(node.children[0])
+        index = self.visit(node.children[1])
+        return f"{base}[{index}]"
+
+    def visit_PostfixExpr(self, node: ASTNode) -> str:
+        target = self.visit(node.children[0])
+        delta = "1"
+        op = "+" if node.attrs["op"] == "++" else "-"
+        temp = self.new_temp()
+        self.emit(op, target, delta, temp, node)
+        self.emit("=", temp, None, target, node)
+        return target
 
     def visit_IfStmt(self, node: ASTNode) -> None:
         condition = self.visit(node.children[0])

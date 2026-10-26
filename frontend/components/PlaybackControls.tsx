@@ -14,17 +14,17 @@ export function PlaybackControls() {
   }, [isPlaying, playbackSpeedMs, stepBy]);
 
   return (
-    <div className="flex items-center gap-2 border-t border-ink/10 bg-white px-3 py-2">
-      <button title="Reset" onClick={() => setStep(0)} className="grid h-9 w-9 place-items-center rounded border border-ink/15 hover:bg-paper">
+    <div className="flex items-center gap-2 border-t-2 border-primary bg-background px-4 py-3">
+      <button title="Reset" onClick={() => setStep(0)} className="grid h-10 w-10 place-items-center border-2 border-primary bg-background hover:bg-primary hover:text-tertiary">
         <RotateCcw className="h-4 w-4" />
       </button>
-      <button title="Step back" onClick={() => stepBy(-1)} className="grid h-9 w-9 place-items-center rounded border border-ink/15 hover:bg-paper">
+      <button title="Step back" onClick={() => stepBy(-1)} className="grid h-10 w-10 place-items-center border-2 border-primary bg-background hover:bg-primary hover:text-tertiary">
         <SkipBack className="h-4 w-4" />
       </button>
-      <button title={isPlaying ? "Pause" : "Play"} onClick={() => setPlaying(!isPlaying)} className="grid h-9 w-9 place-items-center rounded bg-ink text-white hover:bg-ink/90">
+      <button title={isPlaying ? "Pause" : "Play"} onClick={() => setPlaying(!isPlaying)} className="grid h-10 w-10 place-items-center border-2 border-primary bg-primary text-tertiary hover:border-secondary hover:bg-secondary">
         {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </button>
-      <button title="Step forward" onClick={() => stepBy(1)} className="grid h-9 w-9 place-items-center rounded border border-ink/15 hover:bg-paper">
+      <button title="Step forward" onClick={() => stepBy(1)} className="grid h-10 w-10 place-items-center border-2 border-primary bg-background hover:bg-primary hover:text-tertiary">
         <SkipForward className="h-4 w-4" />
       </button>
       <input
@@ -35,9 +35,9 @@ export function PlaybackControls() {
         step="100"
         value={playbackSpeedMs}
         onChange={(event) => setSpeed(Number(event.target.value))}
-        className="ml-3 w-36 accent-coral"
+        className="ml-4 w-36 accent-secondary"
       />
-      <span className="text-xs text-ink/60">{playbackSpeedMs}ms</span>
+      <span className="text-overline uppercase text-muted">{playbackSpeedMs}ms</span>
     </div>
   );
 }

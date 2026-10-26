@@ -11,18 +11,20 @@ export function TACView({
   selectedAstNodeId: string | null;
   onSelectAst: (id: string) => void;
 }) {
-  if (!data) return <div className="p-4 text-sm text-ink/55">Compile to view TAC.</div>;
+  if (!data) return <div className="p-6 text-overline uppercase text-muted">Compile to view TAC.</div>;
   return (
-    <div className="h-full overflow-auto bg-[#fbfcf8] p-4 font-mono text-sm">
+    <div className="h-full overflow-auto bg-background p-6 font-mono text-sm">
       {data.instructions.map((instruction) => (
         <button
           key={instruction.index}
           onClick={() => onSelectAst(instruction.sourceAstNodeId)}
-          className={`mb-1 flex w-full rounded px-3 py-2 text-left ${
-            selectedAstNodeId === instruction.sourceAstNodeId ? "bg-coral/15 ring-1 ring-coral" : "bg-white hover:bg-paper"
+          className={`mb-2 flex w-full border-2 px-3 py-2 text-left ${
+            selectedAstNodeId === instruction.sourceAstNodeId
+              ? "border-secondary bg-[var(--vb-error-surface)]"
+              : "border-border-subtle bg-background hover:border-primary hover:bg-surface"
           }`}
         >
-          <span className="mr-4 w-8 text-ink/40">{instruction.index}</span>
+          <span className="mr-4 w-8 text-faint">{instruction.index}</span>
           <span>{formatInstruction(instruction)}</span>
         </button>
       ))}

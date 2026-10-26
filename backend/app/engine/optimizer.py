@@ -8,13 +8,19 @@ class Optimizer:
 
     def optimize(self) -> tuple[dict, list[dict]]:
         blocks = self.basic_blocks()
+        cfg = self.cfg(blocks)
         dag = self.build_dag(blocks)
         optimized, changes = self.peephole()
         result = {
             "blocks": blocks,
+            "cfg": cfg,
             "dag": dag,
             "peepholeChanges": changes,
             "optimizedInstructions": self.reindex(optimized),
+            "optimizationSteps": [
+                {"pass": "peephole", "before": self.instructions, "after": self.reindex(optimized), "reason": change["reason"]}
+                for change in changes
+            ],
         }
         return result, self.steps
 
@@ -45,6 +51,23 @@ class Optimizer:
             )
         self.step("Partitioned TAC into basic blocks", {"blocks": [b["id"] for b in blocks]})
         return blocks
+
+    def cfg(self, blocks: list[dict]) -> dict:
+        if not blocks:
+            return {"nodes": [], "edges": []}
+        label_to_block = {}
+        for block in blocks:
+            for instr in block["instructions"]:
+                if instr["op"] == "label":
+                    label_to_block[instr["result"]] = block["id"]
+        edges = []
+        for idx, block in enumerate(blocks):
+            last = block["instructions"][-1]
+            if last["op"] in {"goto", "ifFalse", "if"} and last["result"] in label_to_block:
+                edges.append({"from": block["id"], "to": label_to_block[last["result"]], "label": "jump" if last["op"] == "goto" else "false"})
+            if last["op"] != "goto" and idx + 1 < len(blocks):
+                edges.append({"from": block["id"], "to": blocks[idx + 1]["id"], "label": "fallthrough" if last["op"] != "ifFalse" else "true"})
+        return {"nodes": [{"id": block["id"], "instructions": block["instructions"]} for block in blocks], "edges": edges}
 
     def build_dag(self, blocks: list[dict]) -> list[dict]:
         nodes: dict[tuple, dict] = {}

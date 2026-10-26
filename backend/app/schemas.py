@@ -4,8 +4,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 PhaseName = Literal["lex", "parse", "semantic", "tac", "optimize"]
-TokenName = Literal["KEYWORD", "IDENT", "NUMBER", "FLOAT", "BOOL", "OP", "PUNCT", "EOF"]
-ValueType = Literal["int", "float", "bool", "void"]
+TokenName = Literal["KEYWORD", "IDENT", "NUMBER", "FLOAT", "BOOL", "STRING", "CHAR", "PREPROCESSOR", "COMMENT", "OP", "PUNCT", "EOF"]
+ValueType = str
 
 
 class CompileRequest(BaseModel):
@@ -29,14 +29,23 @@ class StepTrace(BaseModel):
 class TokenPayload(BaseModel):
     type: TokenName
     value: str
+    lexeme: str | None = None
     line: int
     col: int
+    column: int | None = None
+    end_line: int | None = None
+    end_column: int | None = None
     startOffset: int
     endOffset: int
+    offset: int | None = None
+    skipped: bool = False
 
 
 class LexResult(BaseModel):
     tokens: list[TokenPayload]
+    comments: list[dict] = []
+    preprocessor: dict = {}
+    lex_errors: list[dict] = []
 
 
 class ASTNodePayload(BaseModel):
@@ -57,9 +66,14 @@ class ParseResult(BaseModel):
 class SymbolEntry(BaseModel):
     name: str
     type: ValueType
-    kind: Literal["var", "func"]
+    kind: str
     scopeId: str
     line: int
+    scope_level: int | None = None
+    size: int | None = None
+    offset: int | None = None
+    storage: str | None = None
+    builtin: bool | None = None
 
 
 class SemanticResult(BaseModel):
@@ -104,8 +118,10 @@ class PeepholeChange(BaseModel):
 
 class OptimizeResult(BaseModel):
     blocks: list[BasicBlock]
+    cfg: dict | None = None
     dag: list[DAGNode]
     peepholeChanges: list[PeepholeChange]
+    optimizationSteps: list[dict] = []
     optimizedInstructions: list[TACInstruction]
 
 
@@ -123,3 +139,19 @@ class FullPipelineResponse(BaseModel):
     semantic: PhaseResult
     tac: PhaseResult
     optimize: PhaseResult
+    tokens: list[dict] = []
+    comments: list[dict] = []
+    preprocessor: dict = {}
+    lex_errors: list[dict] = []
+    ast: dict | None = None
+    parse_errors: list[dict] = []
+    symbol_tables: list[dict] = []
+    types: dict = {}
+    diagnostics: list[dict] = []
+    functions: list[dict] = []
+    data_section: list[dict] = []
+    ast_stats: dict = {}
+    filename: str | None = None
+    size_bytes: int | None = None
+    line_count: int | None = None
+    source: str | None = None

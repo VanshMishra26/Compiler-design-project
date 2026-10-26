@@ -4,7 +4,32 @@ from .ast_nodes import ASTNode
 from .errors import CompilerError
 
 
-NUMERIC = {"int", "float"}
+NUMERIC = {"char", "short", "int", "long", "float", "double", "size_t"}
+BUILTINS = {
+    "printf": "int",
+    "scanf": "int",
+    "puts": "int",
+    "putchar": "int",
+    "getchar": "int",
+    "malloc": "void*",
+    "calloc": "void*",
+    "realloc": "void*",
+    "free": "void",
+    "memcpy": "void*",
+    "memset": "void*",
+    "strlen": "long",
+    "strcmp": "int",
+    "strcpy": "char*",
+    "strncpy": "char*",
+    "strcat": "char*",
+    "abs": "int",
+    "exit": "void",
+    "rand": "int",
+    "srand": "void",
+    "atoi": "int",
+    "sqrt": "double",
+    "pow": "double",
+}
 
 
 class SemanticAnalyzer:
@@ -20,6 +45,11 @@ class SemanticAnalyzer:
 
     def analyze(self) -> tuple[dict, list[dict], list[str], list[dict]]:
         self.push_scope("global")
+        for name, return_type in BUILTINS.items():
+            self.declare(name, return_type, "func", 1, builtin=True)
+        self.declare("size_t", "typedef", "typedef", 1, builtin=True)
+        self.declare("FILE", "typedef", "typedef", 1, builtin=True)
+        self.declare("NULL", "void*", "var", 1, builtin=True)
         self.visit(self.ast)
         self.pop_scope()
         return self.ast.to_dict(), self.symbols, self.warnings, self.steps
@@ -45,6 +75,9 @@ class SemanticAnalyzer:
         return "void"
 
     def visit_FuncDecl(self, node: ASTNode) -> str:
+        if node.attrs.get("prototype"):
+            node.attrs["inferredType"] = node.attrs["returnType"]
+            return node.attrs["returnType"]
         previous = self.current_function_return
         self.current_function_return = node.attrs["returnType"]
         self.push_scope(f"func_{node.attrs['name']}")
@@ -73,6 +106,17 @@ class SemanticAnalyzer:
         node.attrs["inferredType"] = declared_type
         return declared_type
 
+    def visit_VarDeclList(self, node: ASTNode) -> str:
+        inferred = "void"
+        for child in node.children:
+            inferred = self.visit(child)
+        node.attrs["inferredType"] = inferred
+        return inferred
+
+    def visit_TypeDecl(self, node: ASTNode) -> str:
+        node.attrs["inferredType"] = "type"
+        return "type"
+
     def visit_Identifier(self, node: ASTNode) -> str:
         symbol = self.resolve(node.attrs["name"], node)
         node.attrs["inferredType"] = symbol["type"]
@@ -84,21 +128,32 @@ class SemanticAnalyzer:
         return node.attrs["literalType"]
 
     def visit_AssignExpr(self, node: ASTNode) -> str:
-        symbol = self.resolve(node.attrs["name"], node)
-        value_type = self.visit(node.children[0])
-        self.ensure_assignable(symbol["type"], value_type, node)
-        node.attrs["inferredType"] = symbol["type"]
-        self.step(f"Type-checked assignment to {node.attrs['name']}", node, {"targetType": symbol["type"], "valueType": value_type})
-        return symbol["type"]
+        if node.attrs.get("targetKind"):
+            target_type = self.visit(node.children[0])
+            value_type = self.visit(node.children[1])
+            target_name = node.children[0].label
+        else:
+            symbol = self.resolve(node.attrs["name"], node)
+            target_type = symbol["type"]
+            value_type = self.visit(node.children[0])
+            target_name = node.attrs["name"]
+        op = node.attrs.get("op", "=")
+        if op != "=":
+            self.ensure_numeric_assignment(target_type, value_type, node, op)
+        else:
+            self.ensure_assignable(target_type, value_type, node)
+        node.attrs["inferredType"] = target_type
+        self.step(f"Type-checked assignment to {target_name}", node, {"targetType": target_type, "valueType": value_type})
+        return target_type
 
     def visit_BinaryExpr(self, node: ASTNode) -> str:
         left = self.visit(node.children[0])
         right = self.visit(node.children[1])
         op = node.attrs["op"]
-        if op in {"+", "-", "*", "/", "%"}:
+        if op in {"+", "-", "*", "/", "%", "<<", ">>", "&", "|", "^"}:
             if left not in NUMERIC or right not in NUMERIC:
                 raise CompilerError(f"Operator '{op}' requires numeric operands", node.line, node.col, "semantic")
-            inferred = "float" if "float" in {left, right} else "int"
+            inferred = "double" if "double" in {left, right} else "float" if "float" in {left, right} else "int"
         elif op in {"<", ">", "<=", ">="}:
             if left not in NUMERIC or right not in NUMERIC:
                 raise CompilerError(f"Operator '{op}' requires numeric operands", node.line, node.col, "semantic")
@@ -108,7 +163,7 @@ class SemanticAnalyzer:
                 raise CompilerError(f"Cannot compare {left} and {right}", node.line, node.col, "semantic")
             inferred = "bool"
         else:
-            if left != "bool" or right != "bool":
+            if left not in {"bool", *NUMERIC} or right not in {"bool", *NUMERIC}:
                 raise CompilerError(f"Operator '{op}' requires bool operands", node.line, node.col, "semantic")
             inferred = "bool"
         node.attrs["inferredType"] = inferred
@@ -118,11 +173,11 @@ class SemanticAnalyzer:
     def visit_UnaryExpr(self, node: ASTNode) -> str:
         operand = self.visit(node.children[0])
         op = node.attrs["op"]
-        if op == "-" and operand not in NUMERIC:
+        if op in {"-", "~"} and operand not in NUMERIC:
             raise CompilerError("Unary '-' requires a numeric operand", node.line, node.col, "semantic")
-        if op == "!" and operand != "bool":
+        if op == "!" and operand not in {"bool", *NUMERIC}:
             raise CompilerError("Unary '!' requires a bool operand", node.line, node.col, "semantic")
-        inferred = operand if op == "-" else "bool"
+        inferred = "long" if op == "sizeof" else f"{operand}*" if op == "&" else operand[:-1] if op == "*" and operand.endswith("*") else operand if op in {"-", "~", "++", "--"} else "bool"
         node.attrs["inferredType"] = inferred
         return inferred
 
@@ -130,23 +185,27 @@ class SemanticAnalyzer:
         symbol = self.resolve(node.attrs["callee"], node, expected_kind="func")
         func_decl = self.find_function(node.attrs["callee"])
         expected = func_decl.attrs["params"] if func_decl else []
-        if len(node.children) != len(expected):
+        if func_decl and len(node.children) != len(expected):
             raise CompilerError(
                 f"Function '{node.attrs['callee']}' expects {len(expected)} args but got {len(node.children)}",
                 node.line,
                 node.col,
                 "semantic",
             )
-        for arg, param in zip(node.children, expected):
-            arg_type = self.visit(arg)
-            self.ensure_assignable(param["type"], arg_type, node)
+        if func_decl:
+            for arg, param in zip(node.children, expected):
+                arg_type = self.visit(arg)
+                self.ensure_assignable(param["type"], arg_type, node)
+        else:
+            for arg in node.children:
+                self.visit(arg)
         node.attrs["inferredType"] = symbol["type"]
         self.step(f"Checked call to {node.attrs['callee']}", node, {"returnType": symbol["type"]})
         return symbol["type"]
 
     def visit_IfStmt(self, node: ASTNode) -> str:
         condition = self.visit(node.children[0])
-        if condition != "bool":
+        if condition not in {"bool", *NUMERIC}:
             raise CompilerError("if condition must be bool", node.line, node.col, "semantic")
         self.visit(node.children[1])
         if len(node.children) > 2:
@@ -156,7 +215,7 @@ class SemanticAnalyzer:
 
     def visit_WhileStmt(self, node: ASTNode) -> str:
         condition = self.visit(node.children[0])
-        if condition != "bool":
+        if condition not in {"bool", *NUMERIC}:
             raise CompilerError("while condition must be bool", node.line, node.col, "semantic")
         self.visit(node.children[1])
         node.attrs["inferredType"] = "void"
@@ -170,11 +229,82 @@ class SemanticAnalyzer:
         node.attrs["inferredType"] = value_type
         return value_type
 
-    def declare(self, name: str, type_: str, kind: str, line: int) -> None:
+    def visit_ForStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_DoWhileStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_SwitchStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_IndexExpr(self, node: ASTNode) -> str:
+        base = self.visit(node.children[0])
+        self.visit(node.children[1])
+        inferred = base[:-2] if base.endswith("[]") else base[:-1] if base.endswith("*") else "int"
+        node.attrs["inferredType"] = inferred
+        return inferred
+
+    def visit_MemberExpr(self, node: ASTNode) -> str:
+        self.visit(node.children[0])
+        node.attrs["inferredType"] = "int"
+        return "int"
+
+    def visit_PostfixExpr(self, node: ASTNode) -> str:
+        inferred = self.visit(node.children[0])
+        node.attrs["inferredType"] = inferred
+        return inferred
+
+    def visit_BreakStmt(self, node: ASTNode) -> str:
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_ContinueStmt(self, node: ASTNode) -> str:
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_GotoStmt(self, node: ASTNode) -> str:
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_LabelStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_InitializerList(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "aggregate"
+        return "aggregate"
+
+    def visit_CaseStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def visit_DefaultStmt(self, node: ASTNode) -> str:
+        for child in node.children:
+            self.visit(child)
+        node.attrs["inferredType"] = "void"
+        return "void"
+
+    def declare(self, name: str, type_: str, kind: str, line: int, builtin: bool = False) -> None:
         current = self.scopes[-1]
         if name in current:
             raise CompilerError(f"Redeclaration of '{name}'", line, 1, "semantic")
-        symbol = {"name": name, "type": type_, "kind": kind, "scopeId": self.scope_ids[-1], "line": line}
+        symbol = {"name": name, "type": type_, "kind": kind, "scopeId": self.scope_ids[-1], "line": line, "scope_level": len(self.scopes) - 1, "size": self.sizeof(type_), "offset": 0, "storage": "builtin" if builtin else "auto", "builtin": builtin}
         current[name] = symbol
         self.symbols.append(symbol)
         self.step(f"Inserted {kind} '{name}' into {self.scope_ids[-1]}", None, symbol)
@@ -189,8 +319,28 @@ class SemanticAnalyzer:
         if not self.compatible(target, value):
             raise CompilerError(f"Cannot assign {value} to {target}", node.line, node.col, "semantic")
 
+    def ensure_numeric_assignment(self, target: str, value: str, node: ASTNode, op: str) -> None:
+        if target.rstrip("[]*") not in NUMERIC or value.rstrip("[]*") not in NUMERIC:
+            raise CompilerError(f"Operator '{op}' requires numeric operands", node.line, node.col, "semantic")
+
     def compatible(self, target: str, value: str) -> bool:
-        return target == value or (target == "float" and value == "int")
+        if target == value or value == "aggregate":
+            return True
+        if target in {"float", "double"} and value in NUMERIC:
+            return True
+        if target in NUMERIC and value in NUMERIC:
+            if target != value:
+                self.warnings.append(f"Implicit conversion from {value} to {target}")
+            return True
+        if target.endswith("*") and value in {"void*", "NULL"}:
+            return True
+        return False
+
+    def sizeof(self, type_: str) -> int:
+        base = type_.replace("const ", "").strip()
+        if base.endswith("*"):
+            return 8
+        return {"char": 1, "short": 2, "int": 4, "bool": 1, "long": 8, "size_t": 8, "float": 4, "double": 8, "void": 0}.get(base, 8)
 
     def find_function(self, name: str) -> ASTNode | None:
         for child in self.ast.children:

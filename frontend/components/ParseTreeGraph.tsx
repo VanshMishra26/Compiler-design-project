@@ -17,7 +17,7 @@ export function ParseTreeGraph({
   selectedAstNodeId: string | null;
   onSelect: (id: string) => void;
 }) {
-  if (!ast) return <div className="p-4 text-sm text-ink/55">Compile to view the parse tree.</div>;
+  if (!ast) return <div className="p-6 text-overline uppercase text-muted">Compile to view the parse tree.</div>;
 
   const visibleIds = new Set<string>();
   steps.slice(0, currentStepIndex + 1).forEach((step) => {
@@ -31,18 +31,24 @@ export function ParseTreeGraph({
     ...node,
     data: { label: `${node.data.subtitle}: ${node.data.label}` },
     style: {
-      border: node.id === selectedAstNodeId ? "2px solid #e8755f" : "1px solid rgba(23,32,38,0.18)",
+      border: node.id === selectedAstNodeId ? "3px solid var(--vb-secondary)" : "2px solid var(--vb-primary)",
+      borderRadius: 0,
+      boxShadow: "none",
       padding: 10,
-      background: "#fff",
-      color: "#172026",
+      background: "var(--vb-background)",
+      color: "var(--vb-primary)",
       minWidth: 130,
-      fontSize: 12
+      fontSize: 12,
+      fontFamily: "Work Sans, -apple-system, Segoe UI, Helvetica, sans-serif",
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: "0.04em"
     }
   }));
 
   return (
     <ReactFlow nodes={styledNodes} edges={edges} fitView onNodeClick={(_, node) => onSelect(node.id)}>
-      <Background color="#d7dbd1" />
+      <Background color="var(--vb-border-subtle)" />
       <Controls />
     </ReactFlow>
   );

@@ -16,8 +16,32 @@ export function CodeEditor({ source, onChange, highlightRange }: CodeEditorProps
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    const colors = voiceboxColors();
     monaco.languages.register({ id: "clike-small" });
     monaco.languages.setMonarchTokensProvider("clike-small", tokenProvider);
+    monaco.editor.defineTheme("voicebox", {
+      base: "vs",
+      inherit: true,
+      rules: [
+        { token: "keyword", foreground: colors.primary, fontStyle: "bold" },
+        { token: "identifier", foreground: colors.primary },
+        { token: "number", foreground: colors.secondary },
+        { token: "string", foreground: colors.muted },
+        { token: "comment", foreground: colors.faint, fontStyle: "italic" },
+        { token: "operator", foreground: colors.primary, fontStyle: "bold" }
+      ],
+      colors: {
+        "editor.background": colors.background,
+        "editor.foreground": colors.primary,
+        "editorLineNumber.foreground": colors.faint,
+        "editorLineNumber.activeForeground": colors.primary,
+        "editor.selectionBackground": colors.raised,
+        "editor.lineHighlightBackground": colors.surface,
+        "editorCursor.foreground": colors.secondary,
+        "editorWhitespace.foreground": colors.borderMedium
+      }
+    });
+    monaco.editor.setTheme("voicebox");
   };
 
   useEffect(() => {
@@ -42,18 +66,22 @@ export function CodeEditor({ source, onChange, highlightRange }: CodeEditorProps
     <Editor
       height="100%"
       language="clike-small"
-      theme="vs-light"
+      theme="voicebox"
       value={source}
       onChange={(value) => onChange(value ?? "")}
       onMount={handleMount}
       options={{
         minimap: { enabled: false },
         fontSize: 14,
+        fontFamily: "Space Mono, Courier New, Consolas, monospace",
+        lineHeight: 22,
         lineNumbersMinChars: 3,
         scrollBeyondLastLine: false,
         roundedSelection: false,
         automaticLayout: true,
-        tabSize: 2
+        tabSize: 2,
+        renderLineHighlight: "line",
+        overviewRulerBorder: false
       }}
     />
   );
@@ -66,14 +94,43 @@ function offsetRangeToMonaco(model: MonacoEditor.ITextModel, range: [number, num
 }
 
 const tokenProvider: languages.IMonarchLanguage = {
-  keywords: ["int", "float", "bool", "void", "if", "else", "while", "return"],
+  keywords: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "bool"],
   tokenizer: {
     root: [
       [/[a-zA-Z_]\w*/, { cases: { "@keywords": "keyword", "true|false": "number", "@default": "identifier" } }],
+      [/\/\/.*$/, "comment"],
+      [/\/\*/, "comment", "@comment"],
+      [/"([^"\\]|\\.)*$/, "string.invalid"],
+      [/"/, "string", "@string"],
       [/\d+\.\d+/, "number.float"],
       [/\d+/, "number"],
       [/[{}()[\];,]/, "delimiter"],
       [/[+\-*/%=!<>|&]+/, "operator"]
+    ],
+    comment: [
+      [/[^/*]+/, "comment"],
+      [/\*\//, "comment", "@pop"],
+      [/[/*]/, "comment"]
+    ],
+    string: [
+      [/[^\\"]+/, "string"],
+      [/\\./, "string.escape"],
+      [/"/, "string", "@pop"]
     ]
   }
 };
+
+function voiceboxColors() {
+  const styles = getComputedStyle(document.documentElement);
+  const read = (name: string) => styles.getPropertyValue(name).trim().replace("#", "");
+  return {
+    primary: read("--vb-primary"),
+    secondary: read("--vb-secondary"),
+    background: read("--vb-background"),
+    surface: read("--vb-surface"),
+    raised: read("--vb-surface-raised"),
+    muted: read("--vb-text-secondary"),
+    faint: read("--vb-text-tertiary"),
+    borderMedium: read("--vb-border-medium")
+  };
+}
